@@ -1,0 +1,51 @@
+---
+- name: Update Pi-hole, system packages, and restart unbound
+  hosts: pihole
+  become: true
+
+  tasks:
+    - name: Run pihole status
+      ansible.builtin.command: pihole status
+      register: pihole_status
+      changed_when: false
+
+    - name: Assert pihole status reports FTL listening and blocking enabled
+      ansible.builtin.assert:
+        that:
+          - "'FTL is listening on port 53' in pihole_status.stdout"
+          - "'Pi-hole blocking is enabled' in pihole_status.stdout"
+        fail_msg: "pihole status did not report FTL listening on port 53 and blocking enabled"
+        success_msg: "pihole status confirms FTL is listening and blocking is enabled"
+
+    - name: Run systemctl status pihole-FTL
+      ansible.builtin.command: systemctl status pihole-FTL --no-pager
+      register: ftl_status
+      changed_when: false
+      failed_when: false # systemctl status can return non-zero even when the service is fine
+
+    - name: Assert pihole-FTL service is loaded and active (running)
+      ansible.builtin.assert:
+        that:
+          - "'Loaded: loaded' in ftl_status.stdout"
+          - "'Active: active (running)' in ftl_status.stdout"
+        fail_msg: "pihole-FTL is not loaded/active as expected"
+        success_msg: "pihole-FTL is loaded and active (running)"
+
+    - name: Update Pi-hole (pihole -up)
+      command: pihole -up
+      register: pihole_update
+      changed_when: "'Everything is up to date!' not in pihole_update.stdout"
+
+    - name: Update apt package cache
+      ansible.builtin.apt:
+        update_cache: true
+
+    - name: Full-upgrade all system packages
+      ansible.builtin.apt:
+        upgrade: full
+        force_apt_get: true
+
+    - name: Restart unbound
+      ansible.builtin.systemd:
+        name: unbound
+        state: restarted

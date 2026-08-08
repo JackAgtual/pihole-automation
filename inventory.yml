@@ -1,0 +1,7 @@
+all:
+  children:
+    pihole:
+      hosts:
+        pihole02:
+          ansible_host: pihole02
+          ansible_user: admin
